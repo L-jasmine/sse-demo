@@ -2,6 +2,7 @@ use futures_util::StreamExt;
 use futures_util::TryStreamExt;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server, StatusCode};
+use std::pin::Pin;
 use std::{net::SocketAddr, time::Duration};
 use tokio::time::interval;
 
@@ -27,10 +28,47 @@ async fn hello_stream() -> Result<impl futures::TryStream<Ok = String, Error = S
     Ok(event_stream)
 }
 
+struct EventStream {
+    count: u32,
+    stream: Pin<Box<dyn futures::Stream<Item = Result<String, String>> + Send>>,
+}
+
+impl futures::Stream for EventStream {
+    type Item = Result<String, String>;
+
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let me = self.get_mut();
+        let pin_s = me.stream.as_mut();
+        match futures::Stream::poll_next(pin_s, cx) {
+            std::task::Poll::Ready(Some(Ok(data))) => {
+                if me.count > 0 {
+                    me.count -= 1;
+                }
+                if me.count == 0 {
+                    println!("data is {:?}", data);
+                    std::task::Poll::Ready(Some(Ok(data)))
+                } else {
+                    std::task::Poll::Ready(Some(Ok(data)))
+                }
+            }
+            std::task::Poll::Ready(Some(Err(e))) => std::task::Poll::Ready(Some(Err(e))),
+            std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
+            std::task::Poll::Pending => std::task::Poll::Pending,
+        }
+    }
+}
+
 async fn handle_request(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     let stream = hello_stream().await.unwrap();
 
     let event_stream = stream.map_err(|e| e.to_string());
+    let event_stream = EventStream {
+        count: 3,
+        stream: Box::pin(event_stream),
+    };
 
     // ! debug
     // ==================================================>
