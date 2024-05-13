@@ -1,0 +1,13 @@
+[package]
+name = "sse-demo"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hyper_wasi = { version = "0.15", features = ["full"] }
+tokio_wasi = { version = "1", features = ["full"] }
+async-stream = "0.3.5"
+futures = { version = "0.3.6", default-features = false, features = ["async-await", "std"] }
+futures-util = "0.3"
